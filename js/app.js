@@ -34,6 +34,9 @@ document.addEventListener('DOMContentLoaded', function() {
   //Submit Button Variable:
   const $submitButton = $('button[type="submit"]');
 
+  //Error message array literal
+  let errorMessages = [];
+
   //Hides any number of individual elements passed as arguments.
   function hideElements(...elements) {
     for(let i = 0; i < elements.length; i++)
@@ -66,6 +69,14 @@ document.addEventListener('DOMContentLoaded', function() {
     displayPaymentOption(creditCardDiv, $payPalDiv, $bitCoinDiv);
   }
 
+  //NameField Event Listener: resets namefield to remove error qualities upon input, and if errors have already
+  //been printed to the page, validates all inputs to remove name error once the field is no longer blank.
+  nameField.addEventListener('input', function() {
+    resetInputFields(nameField);
+    if(errorMessages.length > 0)
+      validateAllFields();
+  });
+
   //Job Role Menu Event listener: Hides the job role text field and then displays it if 'other' is selected.
   jobRoleMenu.addEventListener('change', function() {
     hideElements(otherJobRoleField);
@@ -95,11 +106,14 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   /*
-  Activity Registration Event Listener: Resets activity legend color and removes error paragraph.
+  Activity Registration Event Listener: If errors have been printed to the page, validates errors to remove
+  activity error once a box has been checked. Resets activity legend color and removes error paragraph.
   Calculates and displays total price of events selected. Checks for conflicts and disables conflicting
   events based on date and start time.
   */
   $activityRegistrationFieldset.on('change', 'label input', function() {
+      if(errorMessages.length > 0)
+        validateAllFields();
       $('p.invalid-checkbox').remove();
       $activityLegend.style.color = '';
       $activityLegend.style.textShadow = '';
@@ -165,7 +179,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   //Clears previous event-price total. Creates a new event price paragraph and
-  //appens it to the activity registration field.
+  //appends it to the activity registration field.
   function showTotalPrice(totalPrice) {
     if($('.total-event-price'))
       $('.total-event-price').remove();
@@ -175,16 +189,30 @@ document.addEventListener('DOMContentLoaded', function() {
     $activityRegistrationFieldset.append(p);
   }
 
-  //Payment option menu event listener: Calls displayPaymentOption with the appropriate
-  //arguments based on which payment option is selected.
+  /*
+  Payment Option Menu Event Listener: Hides 'select payment option' from the drop-down menu so it can no longer
+  be selected. Calls displayPaymentOption with the appropriate arguments based on which payment option is selected.
+  If paypal or bitcoin are selected, resets the credit card fields to remove visual error qualities, and validates
+  input fields to remove credit card errors if any are present on the page or in the errorMessage array.
+  */
   paymentOptionMenu.addEventListener('change', function() {
-    if(paymentOptionMenu.value === "select_method" ||
-       paymentOptionMenu.value === "credit card")
+    hideElements(paymentOptionMenu[0]);
+    if(paymentOptionMenu.value === "credit card") {
         displayPaymentOption(creditCardDiv, $payPalDiv, $bitCoinDiv);
-    else if (paymentOptionMenu.value === "paypal")
+    } else if (paymentOptionMenu.value === "paypal") {
+        resetInputFields($creditCardNumber, $zipCode, $cvv);
+        resetInputFieldValue($creditCardNumber, $zipCode, $cvv);
         displayPaymentOption($payPalDiv, creditCardDiv, $bitCoinDiv);
-    else
+    } else if (paymentOptionMenu.value === "bitcoin") {
+        resetInputFieldValue($creditCardNumber, $zipCode, $cvv);
+        resetInputFields($creditCardNumber, $zipCode, $cvv);
         displayPaymentOption($bitCoinDiv, $payPalDiv, creditCardDiv);
+    }
+    if(paymentOptionMenu.value === "paypal" ||
+       paymentOptionMenu.value === "bitcoin") {
+       if(errorMessages.length > 0)
+         validateAllFields();
+       }
   });
 
   //Displays payment option based on method selected, and hides the other options.
@@ -222,42 +250,57 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   /*
-  Email field event listener: Resets field and removes error message. Upon each new input,
+  Email Field Event Listener: Resets field and removes error message. Upon each new input,
   checks user input against pattern and displays an error message as long as input is not
-  in an email format. If user input matches the pattern, no error message is set.
+  in an email format. If user input matches the pattern, no error message is set. Input
+  fields are then validated to remove any existing email error messages on the page.
   */
   emailField.addEventListener('input', function() {
-    resetInputField(emailField);
+    resetInputFields(emailField);
+    if(errorMessages.length > 0)
+      validateAllFields();
     $('p.invalid-input').remove();
       emailField.pattern = "^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9._-]+[.][a-zA-Z]{2,5}$";
       if(emailField.value !== '' ||
          emailField.value !== null) {
-        if(emailField.validity.patternMismatch) {
+        if(emailField.validity.patternMismatch ||
+          (emailField.value === '' && errorMessages.length > 0)) {
           emailField.setCustomValidity(' ');
           const p = createErrorElement('p', 'Please enter a valid email (e.g. anna@gmail.com)', 'invalid-input');
           p.style.margin = '-5px 20px 0 0';
           p.style.float = 'right';
           $(p).insertBefore(emailField.previousElementSibling);
-          emailField.placeholder = 'anna@gmail.com';
-          emailField.style.border = '2px solid #cc0000';
-          emailField.previousElementSibling.style.color = '#cc0000';
-          emailField.previousElementSibling.style.fontWeight = 'bold';
+          errorizeElement(emailField, 'anna@gmail.com');
         } else {
             emailField.setCustomValidity('');
         }
     }
   });
 
-  /*
-  Submit button event listener: Removes any errors that exist. Creates an empty array literal to hold new errors
-  and initializes a totalErrors variable to keep track of the number of errors. Checks for blank fields, improperly
-  formatted fields and if at least one activites checkbox is checked and stores the results in error varibles.
-  Pushes errors onto ErrorMessage array.
-  */
+  //Credit Card Div Event Listener: Through use of bubbling, upon user input, validates all input fields to remove
+  //error messages and error qualities related to credit card fields once related regex for each fields is matched.
+  creditCardDiv.addEventListener('input', function(event) {
+    if(errorMessages.length > 0)
+      validateAllFields();
+  });
+
+  //Submit button event listener: Calls validateAllFields() to check for any errors and scrolls to the top of
+  //the page where errors are printed so they are immediately available to the user.
   $submitButton.on('click', function() {
+    validateAllFields();
+    $(function() {
+      $('html').scrollTop(0);
+    });
+  });
+
+  /*
+  Removes any errors that exist. Reassigns errorMessages to an empty array to hold new errors. Checks for blank
+  fields, improperly formatted fields and if at least one activites checkbox is checked, and stores the results
+  in error varibles. Pushes errors onto ErrorMessage array.
+  */
+  function validateAllFields() {
     $('.errors').remove();
-    const errorMessages = [];
-    let totalErrors = 0;
+    errorMessages = [];
     const nameError = checkForBlankFields(nameField,
                                           'A name is required (e.g. Anna Banana)',
                                           'A name is required (e.g. Anna Banana)');
@@ -270,12 +313,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const checkboxError = validateActivites();
     errorMessages.push(nameError, emailError, checkboxError);
     /*
-    If credit card payment option is selected or no option is selected, validates credit card input fields.
+    If credit card payment option is visible, validates credit card input fields.
     If an input field is blank or improperly formatted, stores appropriate error into error variable and
-    pushes error onto the end of the errorMessage array.
+    pushes error onto the end of the errorMessage array. Calls printErrors().
     */
-    if(paymentOptions[1].selected ||
-       paymentOptions[0].selected) {
+    if(creditCardDiv.style.display === '') {
         const cardCardError = validateInputField($creditCardNumber,
                                                  '[0-9]{13,16}',
                                                  'A valid credit card number is required (e.g. 12345678912345)',
@@ -296,13 +338,18 @@ document.addEventListener('DOMContentLoaded', function() {
                                             '123',
                                             '123');
         errorMessages.push(cardCardError, zipCodeError, cvvError);
-   }
+    }
+    printErrors(errorMessages);
+  }
+
    /*
-   Evaluates for any errors, and if present, an unordered list of error messages is created
-   appended to an errorParagraph, and the errorParagraph is inserted before the basic info
-   section of the form. Scrolls to the top of the page as long as there are errors so user
-   can immediately see list of current errors.
+   Initializes a totalErrors variable to keep track of the number of errors. Evaluates for
+   any errors, and if present, an unordered list of error messages is created, appended to
+   an errorParagraph, and the errorParagraph is inserted before the basic info section of
+   the form.
    */
+   function printErrors(errorMessageArray) {
+    let totalErrors = 0;
     const isError = evaluateErrors(errorMessages);
     if(isError) {
       const ul = document.createElement('ul');
@@ -317,10 +364,7 @@ document.addEventListener('DOMContentLoaded', function() {
       errorParagraph.appendChild(ul);
       $(errorParagraph).insertBefore(basicInfoFieldset);
     }
-    $(function() {
-      $('html').scrollTop(0);
-    });
-  });
+  }
 
   //Loops through the errorArray passed as its argument and returns true if an error is present.
   function evaluateErrors(errorArray){
@@ -334,7 +378,7 @@ document.addEventListener('DOMContentLoaded', function() {
   //match pattern passed as argument, a separate error message is returned. Error fields are also made red,
   //bold, and given borders.
   function validateInputField(inputField, pattern, blankErrorMessage, formatErrorMessage, blankExampleText, formatExampleText) {
-    resetInputField(inputField);
+    resetInputFields(inputField);
     inputField.pattern = pattern;
     if(inputField.value === null ||
        inputField.value === '') {
@@ -353,7 +397,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   //Checks if the input field passed as an argument is blank. If blank, formats the input as error.
   function checkForBlankFields(input, errorMessage, exampleText) {
-    resetInputField(input);
+    resetInputFields(input);
     if(input.value === null ||
        input.value === '') {
          input.setCustomValidity(' ');
@@ -366,12 +410,22 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   //Resets input field so it no longer appears as a field in error.
-  function resetInputField(input) {
-    input.style.border = '';
-    input.className = '';
-    input.previousElementSibling.style.color = '';
-    input.previousElementSibling.style.fontWeight = '';
-    input.previousElementSibling.style.textShadow = '';
+  function resetInputFields(...input) {
+    for(let i = 0; i < input.length; i++) {
+      input[i].setCustomValidity('');
+      input[i].style.placeholder = '';
+      input[i].style.border = '';
+      input[i].className = '';
+      input[i].previousElementSibling.style.color = '';
+      input[i].previousElementSibling.style.fontWeight = '';
+      input[i].previousElementSibling.style.textShadow = '';
+    }
+  }
+
+  //Resets value of any number of input fields to an empty String.
+  function resetInputFieldValue(...input) {
+    for(let i = 0; i < input.length; i++)
+      input[i].value = '';
   }
 
   //Removes error message, and if no checkboxes are checked, creates and inserts an error message,
